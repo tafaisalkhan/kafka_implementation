@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .panel { fill: #111827; stroke: #334155; stroke-width: 2; rx: 18; }
+      .box { fill: #1e293b; stroke: #64748b; stroke-width: 2; rx: 14; }
+      .box-alt { fill: #172554; stroke: #60a5fa; stroke-width: 2; rx: 14; }
+      .box-green { fill: #064e3b; stroke: #34d399; stroke-width: 2; rx: 14; }
+      .box-red { fill: #7f1d1d; stroke: #f87171; stroke-width: 2; rx: 14; }
+      .label { fill: #e2e8f0; font-family: Arial, Helvetica, sans-serif; font-size: 22px; font-weight: 700; }
+      .small { fill: #cbd5e1; font-family: Arial, Helvetica, sans-serif; font-size: 17px; }
+      .tiny { fill: #94a3b8; font-family: Arial, Helvetica, sans-serif; font-size: 15px; }
+      .title { fill: #f8fafc; font-family: Arial, Helvetica, sans-serif; font-size: 34px; font-weight: 700; }
+      .line { stroke: #cbd5e1; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .line-green { stroke: #34d399; stroke-width: 3; fill: none; marker-end: url(#arrow-green); }
+      .line-red { stroke: #f87171; stroke-width: 3; fill: none; marker-end: url(#arrow-red); }
+      .note { fill: #0b1220; stroke: #475569; stroke-width: 1.5; rx: 10; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#cbd5e1" />
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34d399" />
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#f87171" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1100" />
+  <rect class="panel" x="35" y="35" width="1530" height="1030" rx="22" />
+
+  <text class="title" x="70" y="90">Resource Workflow Saga</text>
+  <text class="small" x="70" y="122">Works for VM, Storage, and Floating IP. Provider is resolved at runtime by an adapter.</text>
+
+  <!-- Main vertical flow -->
+  <rect class="box" x="120" y="170" width="320" height="74" rx="14" />
+  <text class="label" x="230" y="214" text-anchor="middle">Client</text>
+  <text class="tiny" x="230" y="236" text-anchor="middle">POST /api/workflows</text>
+
+  <line class="line" x1="280" y1="244" x2="280" y2="292" />
+
+  <rect class="box-alt" x="120" y="292" width="320" height="88" rx="14" />
+  <text class="label" x="280" y="334" text-anchor="middle">WorkflowController</text>
+  <text class="tiny" x="280" y="358" text-anchor="middle">accepts request, returns workflowId</text>
+
+  <line class="line" x1="280" y1="380" x2="280" y2="428" />
+
+  <rect class="box-alt" x="120" y="428" width="320" height="96" rx="14" />
+  <text class="label" x="280" y="470" text-anchor="middle">WorkflowWorkflowService</text>
+  <text class="tiny" x="280" y="494" text-anchor="middle">creates workflowId, publishes initiated event</text>
+  <text class="tiny" x="280" y="516" text-anchor="middle">topic: resource-workflow-initiated</text>
+
+  <line class="line" x1="280" y1="524" x2="280" y2="574" />
+
+  <rect class="box" x="120" y="574" width="320" height="84" rx="14" />
+  <text class="label" x="280" y="614" text-anchor="middle">QuotaReservationListener</text>
+  <text class="tiny" x="280" y="638" text-anchor="middle">reserve or reject quota</text>
+
+  <!-- Branching area -->
+  <rect class="note" x="520" y="185" width="220" height="76" rx="12" />
+  <text class="small" x="630" y="215" text-anchor="middle">simulateQuotaFailure = true</text>
+  <text class="tiny" x="630" y="238" text-anchor="middle">quota-rejected branch</text>
+
+  <rect class="note" x="520" y="275" width="220" height="76" rx="12" />
+  <text class="small" x="630" y="305" text-anchor="middle">simulateQuotaFailure = false</text>
+  <text class="tiny" x="630" y="328" text-anchor="middle">quota-reserved branch</text>
+
+  <line class="line-red" x1="440" y1="620" x2="520" y2="223" />
+  <line class="line-green" x1="440" y1="620" x2="520" y2="313" />
+
+  <!-- Failure branch -->
+  <rect class="box-red" x="790" y="170" width="330" height="88" rx="14" />
+  <text class="label" x="955" y="212" text-anchor="middle">QuotaRevertListener</text>
+  <text class="tiny" x="955" y="236" text-anchor="middle">handles quota rejection</text>
+  <text class="tiny" x="955" y="256" text-anchor="middle">topic: resource-workflow-quota-rejected</text>
+
+  <rect class="box-red" x="1180" y="170" width="320" height="88" rx="14" />
+  <text class="label" x="1340" y="212" text-anchor="middle">Compensation</text>
+  <text class="tiny" x="1340" y="236" text-anchor="middle">publish resource-workflow-quota-reverted</text>
+  <text class="tiny" x="1340" y="256" text-anchor="middle">release reservation</text>
+
+  <line class="line-red" x1="740" y1="223" x2="790" y2="214" />
+  <line class="line-red" x1="1120" y1="214" x2="1180" y2="214" />
+
+  <!-- Success branch -->
+  <rect class="box-green" x="790" y="300" width="330" height="96" rx="14" />
+  <text class="label" x="955" y="342" text-anchor="middle">ProvisioningListener</text>
+  <text class="tiny" x="955" y="366" text-anchor="middle">resolves OpenStack / VMware / Huawei adapter</text>
+  <text class="tiny" x="955" y="388" text-anchor="middle">topic: resource-workflow-quota-reserved</text>
+
+  <rect class="note" x="790" y="430" width="330" height="88" rx="14" />
+  <text class="small" x="955" y="465" text-anchor="middle">simulateProvisionFailure = true</text>
+  <text class="tiny" x="955" y="488" text-anchor="middle">provision-failed branch</text>
+
+  <rect class="note" x="790" y="540" width="330" height="88" rx="14" />
+  <text class="small" x="955" y="575" text-anchor="middle">simulateProvisionFailure = false</text>
+  <text class="tiny" x="955" y="598" text-anchor="middle">provision-succeeded branch</text>
+
+  <line class="line-green" x1="740" y1="313" x2="790" y2="348" />
+
+  <!-- Provision failure branch -->
+  <rect class="box-red" x="1180" y="430" width="320" height="88" rx="14" />
+  <text class="label" x="1340" y="468" text-anchor="middle">QuotaRevertListener</text>
+  <text class="tiny" x="1340" y="492" text-anchor="middle">handles provisioning failure</text>
+  <text class="tiny" x="1340" y="512" text-anchor="middle">publish resource-workflow-quota-reverted</text>
+
+  <line class="line-red" x1="1120" y1="475" x2="1180" y2="474" />
+
+  <!-- Provision success branch -->
+  <rect class="box-green" x="1180" y="540" width="320" height="88" rx="14" />
+  <text class="label" x="1340" y="578" text-anchor="middle">QuotaCommitListener</text>
+  <text class="tiny" x="1340" y="602" text-anchor="middle">commit quota after success</text>
+  <text class="tiny" x="1340" y="622" text-anchor="middle">publish resource-workflow-quota-committed</text>
+
+  <rect class="box-green" x="1180" y="670" width="320" height="88" rx="14" />
+  <text class="label" x="1340" y="708" text-anchor="middle">UsageRecordListener</text>
+  <text class="tiny" x="1340" y="732" text-anchor="middle">record actual usage</text>
+  <text class="tiny" x="1340" y="752" text-anchor="middle">publish resource-workflow-usage-recorded</text>
+
+  <line class="line-green" x1="1120" y1="584" x2="1180" y2="584" />
+  <line class="line-green" x1="1340" y1="628" x2="1340" y2="670" />
+
+  <!-- Footer explanation -->
+  <rect class="note" x="90" y="835" width="1420" height="155" rx="16" />
+  <text class="small" x="120" y="875">Event order</text>
+  <text class="tiny" x="120" y="905">1. API creates workflowId</text>
+  <text class="tiny" x="120" y="928">2. initiated event is sent</text>
+  <text class="tiny" x="120" y="951">3. quota service reserves or rejects</text>
+  <text class="tiny" x="120" y="974">4. provisioning starts only after reservation</text>
+  <text class="tiny" x="120" y="997">5. success commits quota and records usage; failure reverts quota</text>
+
+  <text class="small" x="760" y="875">Generic design notes</text>
+  <text class="tiny" x="760" y="905">The workflow is saga-based, not synchronous.</text>
+  <text class="tiny" x="760" y="928">The same event shape works for VM, storage, and floating IP.</text>
+  <text class="tiny" x="760" y="951">Use `workflowId` as the correlation id across all topics.</text>
+  <text class="tiny" x="760" y="974">Add retries, idempotency, and DLQ for production hardening.</text>
+</svg>

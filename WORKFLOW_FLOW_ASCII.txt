@@ -1,0 +1,250 @@
+RESOURCE WORKFLOW FLOW
+
+Works for VM, STORAGE, and FLOATING_IP
+Provider is chosen at runtime from operation.name and routed through an adapter.
+The API returns only {"workflowId":"..."} and publishes the first event asynchronously.
+
+Legend:
+- API = WorkflowController
+- Service = WorkflowWorkflowService
+- D = WorkflowInitiationDispatchService
+- Q = QuotaReservationListener
+- P = ProvisioningListener
+- A = Provider adapter resolved by ProvisioningAdapterRegistry
+- C = QuotaCommitListener
+- U = UsageRecordListener
+- R = QuotaRevertListener
+
+MAIN FLOW
+
+Client
+  |
+  v
+POST /api/workflows
+  |
+  v
+API creates workflowId
+WorkflowController
+  |
+  v
+Service stores INITIATED event in WorkflowEventStore
+WorkflowWorkflowService
+  |
+  v
+Dispatch publishes INITIATED event asynchronously
+WorkflowInitiationDispatchService
+  |
+  v
+Kafka topic: resource-workflow-initiated
+  |
+  v
+Q: QuotaReservationListener
+
+-----------------------------------------
+CASE 1: QUOTA FAILURE
+-----------------------------------------
+
+Q receives initiated event
+  |
+  +--> simulateQuotaFailure = true
+  |
+  v
+publish resource-workflow-quota-rejected
+  |
+  v
+R: QuotaRevertListener
+  |
+  v
+release reservation
+publish resource-workflow-quota-reverted
+
+-----------------------------------------
+CASE 2: QUOTA SUCCESS
+-----------------------------------------
+
+Q receives initiated event
+  |
+  +--> simulateQuotaFailure = false
+  |
+  v
+reserve quota
+publish resource-workflow-quota-reserved
+  |
+  v
+P: ProvisioningListener
+  |
+  v
+ProvisioningAdapterRegistry resolves provider
+  |
+  v
+resolve from operation.name
+  |
+  v
+A: OpenStack / VMware / Huawei adapter
+
+    +--------------------------------------+
+    | simulateProvisionFailure = true      |
+    +--------------------------------------+
+                      |
+                      v
+            provision failed
+                      |
+                      v
+            publish resource-workflow-provision-failed
+                      |
+                      v
+            R: QuotaRevertListener
+                      |
+                      v
+            release reservation
+            publish resource-workflow-quota-reverted
+
+    +--------------------------------------+
+    | simulateProvisionFailure = false     |
+    +--------------------------------------+
+                      |
+                      v
+            provision succeeded
+                      |
+                      v
+            publish resource-workflow-provision-succeeded
+                      |
+                      +--> C: QuotaCommitListener
+                      |      |
+                      |      v
+                      |      publish resource-workflow-quota-committed
+                      |
+                      +--> U: UsageRecordListener
+                             |
+                             v
+                     publish resource-workflow-usage-recorded
+
+WHAT THE SAME RESPONSE MEANS
+
+- HTTP response returns the workflowId immediately in all cases
+- The difference is only in the Kafka event path after initiation
+- workflowId stays the same across all events
+
+EVENT STORE
+
+- stores the initial event and every handoff in memory
+- used for /api/workflows/events
+- not the source of truth; Kafka is the real workflow transport
+
+TOPICS
+
+- resource-workflow-initiated
+- resource-workflow-quota-reserved
+- resource-workflow-quota-rejected
+- resource-workflow-provision-succeeded
+- resource-workflow-provision-failed
+- resource-workflow-quota-committed
+- resource-workflow-quota-reverted
+- resource-workflow-usage-recorded
+
+USEFUL CURL EXAMPLES
+
+Success:
+curl -X POST http://localhost:8080/api/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "operation":{
+      "name":"os_create_vm",
+      "type":"instance_creating",
+      "contractId":1169,
+      "productId":2,
+      "providerId":33,
+      "parameters":{
+        "name":"rebuiltMain",
+        "password":"",
+        "flavorRef":"2d6efff7-3ede-4382-9a98-ac80d7023b19",
+        "imageRef":"7e21d3e2-e5e3-4a1f-b61e-4d3d93125399",
+        "block_device_mapping_v2":[{"boot_index":0,"destination_type":"volume","source_type":"image","uuid":"7e21d3e2-e5e3-4a1f-b61e-4d3d93125399","volume_size":20,"volume_type":"ce6d88d0-cae5-430a-b0dd-215de1d6f79d","updatedSize":20,"productVolumeType":"9072"}],
+        "metadata":{},
+        "networks":[{"uuid":"0b6fb720-e2ef-46ae-a849-eaead8a8063b"}],
+        "mode":"quickStart",
+        "security_groups":[],
+        "user_data":"",
+        "availability_zone":"nova",
+        "project_id":"12e2844e83d343b9be88bce89866b6d0",
+        "productImageRef":"9069",
+        "productFlavorRef":"9070",
+        "billingMode":"payg"
+      },
+      "region":"California",
+      "otherParameters":"{}"
+    },
+    "simulateProvisionFailure":false,
+    "simulateQuotaFailure":false
+  }'
+
+Response:
+{"workflowId":"uuid"}
+
+Provision failure:
+curl -X POST http://localhost:8080/api/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "operation":{
+      "name":"os_create_vm",
+      "type":"instance_creating",
+      "contractId":1169,
+      "productId":2,
+      "providerId":33,
+      "parameters":{
+        "name":"rebuiltMain",
+        "password":"",
+        "flavorRef":"2d6efff7-3ede-4382-9a98-ac80d7023b19",
+        "imageRef":"7e21d3e2-e5e3-4a1f-b61e-4d3d93125399",
+        "block_device_mapping_v2":[{"boot_index":0,"destination_type":"volume","source_type":"image","uuid":"7e21d3e2-e5e3-4a1f-b61e-4d3d93125399","volume_size":20,"volume_type":"ce6d88d0-cae5-430a-b0dd-215de1d6f79d","updatedSize":20,"productVolumeType":"9072"}],
+        "metadata":{},
+        "networks":[{"uuid":"0b6fb720-e2ef-46ae-a849-eaead8a8063b"}],
+        "mode":"quickStart",
+        "security_groups":[],
+        "user_data":"",
+        "availability_zone":"nova",
+        "project_id":"12e2844e83d343b9be88bce89866b6d0",
+        "productImageRef":"9069",
+        "productFlavorRef":"9070",
+        "billingMode":"payg"
+      },
+      "region":"California",
+      "otherParameters":"{}"
+    },
+    "simulateProvisionFailure":true,
+    "simulateQuotaFailure":false
+  }'
+
+Quota failure:
+curl -X POST http://localhost:8080/api/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "operation":{
+      "name":"os_create_vm",
+      "type":"instance_creating",
+      "contractId":1169,
+      "productId":2,
+      "providerId":33,
+      "parameters":{
+        "name":"rebuiltMain",
+        "password":"",
+        "flavorRef":"2d6efff7-3ede-4382-9a98-ac80d7023b19",
+        "imageRef":"7e21d3e2-e5e3-4a1f-b61e-4d3d93125399",
+        "block_device_mapping_v2":[{"boot_index":0,"destination_type":"volume","source_type":"image","uuid":"7e21d3e2-e5e3-4a1f-b61e-4d3d93125399","volume_size":20,"volume_type":"ce6d88d0-cae5-430a-b0dd-215de1d6f79d","updatedSize":20,"productVolumeType":"9072"}],
+        "metadata":{},
+        "networks":[{"uuid":"0b6fb720-e2ef-46ae-a849-eaead8a8063b"}],
+        "mode":"quickStart",
+        "security_groups":[],
+        "user_data":"",
+        "availability_zone":"nova",
+        "project_id":"12e2844e83d343b9be88bce89866b6d0",
+        "productImageRef":"9069",
+        "productFlavorRef":"9070",
+        "billingMode":"payg"
+      },
+      "region":"California",
+      "otherParameters":"{}"
+    },
+    "simulateProvisionFailure":false,
+    "simulateQuotaFailure":true
+  }'
